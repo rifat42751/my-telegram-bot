@@ -27,34 +27,30 @@ STRING_SESSION = os.environ.get("STRING_SESSION")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
 genai.configure(api_key=GEMINI_API_KEY)
-
-# আপডেটেড মডেল নেম ব্যবহার
-model = genai.GenerativeModel("gemini-2.5-flash")
+model = genai.GenerativeModel("gemini-1.5-flash")
 
 client = TelegramClient(StringSession(STRING_SESSION), API_ID, API_HASH)
 
-@client.on(events.NewMessage(incoming=True))
+@client.on(events.NewMessage)
 async def handle_message(event):
-    # নিজের মেসেজ বা বট মেসেজে যাতে লুপ না হয়
-    if event.is_private and not event.out:
-        user_prompt = event.text
-        if not user_prompt:
+    # বট যেন নিজের তৈরি করা উত্তরে পুনরায় উত্তর না দেয় (লুপ বন্ধ রাখা)
+    me = await client.get_me()
+    
+    if event.is_private:
+        # মেসেজ খালি হলে বা নিজের বটের রিপ্লাই মেসেজ হলে স্কিপ করবে
+        if not event.text or (event.out and event.text.startswith("🤖 AI:")):
             return
-            
+
+        user_prompt = event.text
+        
         try:
             response = model.generate_content(
-                f"You are a helpful Telegram AI assistant. Provide concise and natural responses. Answer in Bengali if the message is in Banglish or Bengali:\n\n{user_prompt}"
+                f"You are a helpful Telegram AI assistant. Provide concise and clear answers. Respond in Bengali if the text is in Bengali or Banglish:\n\n{user_prompt}"
             )
             if response.text:
-                await event.reply(response.text)
+                await event.reply(f"🤖 AI:\n{response.text}")
         except Exception as e:
-            # সমস্যা চিহ্নিত করার জন্য ব্যাকআপ মডেল দিয়ে চেষ্টা
-            try:
-                fallback_model = genai.GenerativeModel("gemini-1.5-pro")
-                res = fallback_model.generate_content(user_prompt)
-                await event.reply(res.text)
-            except Exception as err:
-                print(f"Error: {err}")
+            print(f"Gemini API Error: {e}")
 
 print("Bot is running successfully...")
 client.start()
